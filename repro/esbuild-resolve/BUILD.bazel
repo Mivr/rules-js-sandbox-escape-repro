@@ -1,0 +1,61 @@
+load("@aspect_rules_js//js:defs.bzl", "js_binary", "js_test")
+
+# Repro: esbuild path resolution escapes the sandbox
+#
+# esbuild is a STATICALLY-LINKED Go binary. This means:
+#   - Node.js fs patches: INEFFECTIVE (esbuild doesn't use Node's fs)
+#   - LD_PRELOAD native fix: INEFFECTIVE (no dynamic linker for static binaries)
+#   - esbuild preserveSymlinks: THE FIX (esbuild's own option)
+#
+# 1. REPRODUCE: bazel run //repro/esbuild-resolve:run_bug
+# 2. VERIFY FIX: ESBUILD_PRESERVE_SYMLINKS=1 bazel run //repro/esbuild-resolve:run_fix
+
+js_binary(
+    name = "run_bug",
+    copy_data_to_bin = False,
+    data = [
+        "src/app.js",
+        "src/util.js",
+        "//:node_modules/esbuild",
+    ],
+    entry_point = "bundle_check.mjs",
+    preserve_symlinks_main = False,
+)
+
+js_test(
+    name = "test_bug",
+    copy_data_to_bin = False,
+    data = [
+        "src/app.js",
+        "src/util.js",
+        "//:node_modules/esbuild",
+    ],
+    entry_point = "bundle_check.mjs",
+    preserve_symlinks_main = False,
+)
+
+js_binary(
+    name = "run_fix",
+    copy_data_to_bin = False,
+    data = [
+        "src/app.js",
+        "src/util.js",
+        "//:node_modules/esbuild",
+    ],
+    entry_point = "bundle_check.mjs",
+    env = {"ESBUILD_PRESERVE_SYMLINKS": "1"},
+    preserve_symlinks_main = False,
+)
+
+js_test(
+    name = "test_fix",
+    copy_data_to_bin = False,
+    data = [
+        "src/app.js",
+        "src/util.js",
+        "//:node_modules/esbuild",
+    ],
+    entry_point = "bundle_check.mjs",
+    env = {"ESBUILD_PRESERVE_SYMLINKS": "1"},
+    preserve_symlinks_main = False,
+)

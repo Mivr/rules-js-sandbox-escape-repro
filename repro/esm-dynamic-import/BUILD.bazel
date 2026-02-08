@@ -1,0 +1,49 @@
+load("@aspect_rules_js//js:defs.bzl", "js_binary", "js_test")
+load("//repro:node_versions.bzl", "NODE_TOOLCHAINS")
+
+# Repro: Dynamic import() escapes the sandbox (issues #353, #915)
+#
+# On Node <= 18.18.2, the JS patches don't intercept realpathSync
+# used by the ESM resolver. Dynamic import() follows symlinks to
+# the source tree, breaking sandbox hermeticity.
+#
+# Per-version tests:
+#   bazel test //repro/esm-dynamic-import:all --config=with-fix
+#
+# Manual debugging:
+#   bazel run //repro/esm-dynamic-import:run_bug
+#   bazel run //repro/esm-dynamic-import:run_fix --config=with-fix
+
+# ---- Per-version test targets ----
+
+[js_test(
+    name = "test_%s" % name,
+    copy_data_to_bin = False,
+    data = ["plugin.mjs"],
+    entry_point = "runner.mjs",
+    node_toolchain = toolchain,
+    preserve_symlinks_main = False,
+) for name, toolchain in NODE_TOOLCHAINS.items()]
+
+test_suite(
+    name = "all_versions",
+    tests = ["test_%s" % name for name in NODE_TOOLCHAINS],
+)
+
+# ---- Manual debugging targets (default toolchain) ----
+
+js_binary(
+    name = "run_bug",
+    copy_data_to_bin = False,
+    data = ["plugin.mjs"],
+    entry_point = "runner.mjs",
+    preserve_symlinks_main = False,
+)
+
+js_binary(
+    name = "run_fix",
+    copy_data_to_bin = False,
+    data = ["plugin.mjs"],
+    entry_point = "runner.mjs",
+    preserve_symlinks_main = False,
+)

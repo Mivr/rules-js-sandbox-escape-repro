@@ -1,0 +1,13 @@
+{
+  "name": "rules-js-sandbox-escape-repro",
+  "private": true,
+  "type": "module",
+  "devDependencies": {
+    "esbuild": "^0.24.2",
+    "vite": "^6.1.0",
+    "vitest": "^3.0.5"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": ["esbuild"]
+  }
+}

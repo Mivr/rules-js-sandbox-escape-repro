@@ -1,0 +1,66 @@
+load("@aspect_rules_js//js:defs.bzl", "js_binary", "js_test")
+
+# Repro: Vite root resolution escapes the sandbox (issue #1669)
+#
+# On Node <= 18.18.2, Vite's realpathSync calls escape the sandbox
+# because the JS patches don't take effect for ESM module resolution.
+# Vite resolves its root directory to the source tree.
+#
+# 1. REPRODUCE: bazel run //repro/vite-dev:run_bug
+# 2. VERIFY FIX: bazel run //repro/vite-dev:run_fix --config=with-fix
+
+js_binary(
+    name = "run_bug",
+    copy_data_to_bin = False,
+    data = [
+        "index.html",
+        "package.json",
+        "src/main.js",
+        "vite.config.mjs",
+        "//:node_modules/vite",
+    ],
+    entry_point = "check_vite_root.mjs",
+    preserve_symlinks_main = False,
+)
+
+js_test(
+    name = "test_bug",
+    copy_data_to_bin = False,
+    data = [
+        "index.html",
+        "package.json",
+        "src/main.js",
+        "vite.config.mjs",
+        "//:node_modules/vite",
+    ],
+    entry_point = "check_vite_root.mjs",
+    preserve_symlinks_main = False,
+)
+
+js_binary(
+    name = "run_fix",
+    copy_data_to_bin = False,
+    data = [
+        "index.html",
+        "package.json",
+        "src/main.js",
+        "vite.config.mjs",
+        "//:node_modules/vite",
+    ],
+    entry_point = "check_vite_root.mjs",
+    preserve_symlinks_main = False,
+)
+
+js_test(
+    name = "test_fix",
+    copy_data_to_bin = False,
+    data = [
+        "index.html",
+        "package.json",
+        "src/main.js",
+        "vite.config.mjs",
+        "//:node_modules/vite",
+    ],
+    entry_point = "check_vite_root.mjs",
+    preserve_symlinks_main = False,
+)

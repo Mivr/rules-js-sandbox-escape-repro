@@ -1,0 +1,5 @@
+{
+  "name": "vitest-repro",
+  "private": true,
+  "type": "module"
+}

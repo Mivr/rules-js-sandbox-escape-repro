@@ -1,0 +1,54 @@
+load("@aspect_rules_js//js:defs.bzl", "js_binary", "js_test")
+load("//repro:node_versions.bzl", "NODE_TOOLCHAINS")
+
+# Repro: ESM static import escapes the sandbox (issue #362)
+#
+# On Node <= 18.18.2, the JS monkey-patches (register.cjs) DON'T take
+# effect for ESM resolution. The ESM resolver captures realpathSync via
+# destructuring BEFORE --require patches run, so import.meta.url resolves
+# through symlinks to the source tree even with patch_node_fs = True.
+#
+# The native FS sandbox (LD_PRELOAD) fixes this at the C level,
+# working on ALL Node versions.
+#
+# Per-version tests:
+#   bazel test //repro/esm-basic:all --config=with-fix   (all pass)
+#   bazel test //repro/esm-basic:all                      (node18 fails)
+#
+# Manual debugging:
+#   bazel run //repro/esm-basic:run_bug
+#   bazel run //repro/esm-basic:run_fix --config=with-fix
+
+# ---- Per-version test targets ----
+
+[js_test(
+    name = "test_%s" % name,
+    copy_data_to_bin = False,
+    data = ["dep.mjs"],
+    entry_point = "entry.mjs",
+    node_toolchain = toolchain,
+    preserve_symlinks_main = False,
+) for name, toolchain in NODE_TOOLCHAINS.items()]
+
+test_suite(
+    name = "all_versions",
+    tests = ["test_%s" % name for name in NODE_TOOLCHAINS],
+)
+
+# ---- Manual debugging targets (default toolchain) ----
+
+js_binary(
+    name = "run_bug",
+    copy_data_to_bin = False,
+    data = ["dep.mjs"],
+    entry_point = "entry.mjs",
+    preserve_symlinks_main = False,
+)
+
+js_binary(
+    name = "run_fix",
+    copy_data_to_bin = False,
+    data = ["dep.mjs"],
+    entry_point = "entry.mjs",
+    preserve_symlinks_main = False,
+)

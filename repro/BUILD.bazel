@@ -1,0 +1,2 @@
+# This file makes //repro a Bazel package so that //repro:node_versions.bzl
+# can be loaded from child packages.
