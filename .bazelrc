@@ -4,4 +4,4 @@
 # Point to the fork with the native FS sandbox fix.
 # Update this path to your local checkout, or use --override_module directly:
 #   bazel test //repro/... --override_module=aspect_rules_js=/path/to/your/fork
-build:with-fix --override_module=aspect_rules_js=/home/mihail/IdeaProjects/rules_js_mivr
+build:with-fix --override_module=aspect_rules_js=/Users/mihailvratchanski/IdeaProjects/rules_js

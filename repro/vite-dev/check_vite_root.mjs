@@ -47,18 +47,34 @@ console.log();
 
 let bugReproduced = false;
 
-if (sourceTree && __dirname.startsWith(sourceTree)) {
-    console.log("BUG: __dirname in vite.config escaped to source tree!");
-    console.log(`  __dirname: ${__dirname}`);
-    console.log(`  Vite would resolve config/index.html from the source tree.`);
-    bugReproduced = true;
-}
+if (sourceTree) {
+    // In run mode (BUILD_WORKSPACE_DIRECTORY is set), check against source tree
+    if (__dirname.startsWith(sourceTree)) {
+        console.log("BUG: __dirname in vite.config escaped to source tree!");
+        console.log(`  __dirname: ${__dirname}`);
+        console.log(`  Vite would resolve config/index.html from the source tree.`);
+        bugReproduced = true;
+    }
 
-if (sourceTree && cwdReal.startsWith(sourceTree)) {
-    console.log("BUG: Vite's root (realpathSync.native(cwd)) escaped!");
-    console.log(`  Vite would look for files in: ${cwdReal}`);
-    console.log(`  Instead of the sandbox at:    ${cwd}`);
-    bugReproduced = true;
+    if (cwdReal.startsWith(sourceTree)) {
+        console.log("BUG: Vite's root (realpathSync.native(cwd)) escaped!");
+        console.log(`  Vite would look for files in: ${cwdReal}`);
+        console.log(`  Instead of the sandbox at:    ${cwd}`);
+        bugReproduced = true;
+    }
+} else {
+    // In test mode (no BUILD_WORKSPACE_DIRECTORY), check .runfiles/ or /execroot/ in path
+    if (!__dirname.includes('.runfiles/') && !__dirname.includes('/execroot/')) {
+        console.log("BUG: __dirname escaped the runfiles tree!");
+        console.log(`  __dirname: ${__dirname}`);
+        bugReproduced = true;
+    }
+
+    if (!cwdReal.includes('.runfiles/') && !cwdReal.includes('/execroot/')) {
+        console.log("BUG: realpathSync.native(cwd) escaped the runfiles tree!");
+        console.log(`  cwdReal: ${cwdReal}`);
+        bugReproduced = true;
+    }
 }
 
 if (bugReproduced) {

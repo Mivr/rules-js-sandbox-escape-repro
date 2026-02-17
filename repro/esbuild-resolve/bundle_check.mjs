@@ -1,13 +1,14 @@
 // Repro for esbuild path resolution escaping the Bazel sandbox.
 //
-// esbuild is a STATICALLY-LINKED Go binary. This means:
-//   - Node.js fs patches (register.cjs) don't work: esbuild never uses Node's fs
-//   - LD_PRELOAD native fix doesn't work: static binaries bypass the dynamic linker
+// On macOS, esbuild is dynamically linked, so DYLD_INSERT_LIBRARIES intercepts
+// its filesystem calls directly via the native FS patch library.
 //
-// The ONLY fix is esbuild's own `preserveSymlinks: true` option.
+// On Linux, esbuild is statically linked — the native fix can't intercept it.
+// A separate fix (e.g. esbuild's preserveSymlinks option) would be needed there.
 //
-// Run with ESBUILD_PRESERVE_SYMLINKS=1 env var to test the fix:
-//   ESBUILD_PRESERVE_SYMLINKS=1 bazel run //repro/esbuild-resolve:run_bug
+// Test with vs without the native fix:
+//   bazel test //repro/esbuild-resolve:test              (bug — no fix)
+//   bazel test //repro/esbuild-resolve:test --config=with-fix  (fix applied)
 
 import * as esbuild from "esbuild";
 import { dirname, resolve } from "node:path";
@@ -17,12 +18,9 @@ import { realpathSync } from "node:fs";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const entryPoint = resolve(__dirname, "src/app.js");
 
-const preserveSymlinks = process.env.ESBUILD_PRESERVE_SYMLINKS === "1";
-
 console.log("=== esbuild Path Resolution Escape Test ===");
 console.log();
 console.log("esbuild version:", esbuild.version);
-console.log("preserveSymlinks:", preserveSymlinks);
 console.log();
 
 // Capture all paths esbuild resolves during bundling
@@ -34,9 +32,6 @@ const result = await esbuild.build({
     write: false,
     metafile: true,
     format: "esm",
-    // esbuild's own symlink control — the only way to prevent escape
-    // for statically-linked Go binaries (LD_PRELOAD can't help here)
-    preserveSymlinks,
     plugins: [
         {
             name: "capture-paths",
@@ -71,7 +66,7 @@ console.log(`  ${__dirname}`);
 console.log();
 
 const realDirname = realpathSync.native(__dirname);
-console.log("realpathSync.native(__dirname) — JS-patched:");
+console.log("realpathSync.native(__dirname) — patched:");
 console.log(`  ${realDirname}`);
 console.log();
 
@@ -90,12 +85,6 @@ if (sourceTree) {
     );
     if (escapedPaths.length > 0) {
         console.log("BUG: esbuild resolved paths escape to SOURCE TREE!");
-        console.log();
-        console.log("  WHY: esbuild is a statically-linked Go binary.");
-        console.log("  - Node.js fs patches: INEFFECTIVE (esbuild doesn't use Node fs)");
-        console.log("  - LD_PRELOAD native fix: INEFFECTIVE (static binary, no dynamic linker)");
-        console.log("  - esbuild preserveSymlinks: " + (preserveSymlinks ? "ENABLED but still escaped?!" : "NOT SET (this is the fix)"));
-        console.log();
         for (const p of escapedPaths) {
             console.log(`  ESCAPED: ${p}`);
         }
@@ -118,13 +107,8 @@ console.log();
 if (bugReproduced) {
     console.log("RESULT: Bug reproduced — esbuild escaped the sandbox.");
     console.log("  esbuild resolved imports through symlinks to the real source tree.");
-    console.log("  Neither Node.js fs patches nor LD_PRELOAD can fix this.");
-    console.log("  Fix: set esbuild's `preserveSymlinks: true` option.");
     process.exit(1);
 } else {
     console.log("RESULT: esbuild resolved paths stayed within the sandbox.");
-    if (preserveSymlinks) {
-        console.log("  esbuild's preserveSymlinks option prevented the escape.");
-    }
     process.exit(0);
 }
