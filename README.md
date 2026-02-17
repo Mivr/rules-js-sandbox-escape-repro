@@ -74,36 +74,51 @@ bazel run //repro/esm-basic:run_fix --config=with-fix
 | Vitest | [#979](https://github.com/aspect-build/rules_js/issues/979) | Test file discovery via escaped paths | `//repro/vitest:test_bug` / `:test_fix` |
 | esbuild | — | esbuild resolves imports through symlinks | `//repro/esbuild-resolve:test` |
 
-## Test Results
+## Compatibility Matrix
 
-### With `--config=with-fix` (native FS sandbox enabled)
+Full results across all bug scenarios, Node versions, and platforms — with and without the native FS sandbox fix.
 
-| Test | Result | Notes |
-|------|--------|-------|
-| `dirname-escape:test_node18` | **PASS** | Native fix intercepts `lstat` |
-| `dirname-escape:test_node20` | PASS | JS patches sufficient |
-| `dirname-escape:test_node22` | PASS | JS patches sufficient |
-| `esm-basic:test_node18` | **PASS** | Native fix intercepts `realpath` + `lstat` |
-| `esm-basic:test_node20` | PASS | JS patches sufficient |
-| `esm-basic:test_node22` | PASS | JS patches sufficient |
-| `esm-dynamic-import:test_node18` | **PASS** | Native fix intercepts ESM resolver |
-| `esm-dynamic-import:test_node20` | PASS | JS patches sufficient |
-| `esm-dynamic-import:test_node22` | PASS | JS patches sufficient |
-| `esbuild-resolve:test` | **PASS** | DYLD intercepts esbuild on macOS; `preserveSymlinks` on Linux |
-| `vite-dev:test_bug` | **PASS** | Native fix prevents `__dirname` escape |
-| `vite-dev:test_fix` | **PASS** | Native fix prevents `__dirname` escape |
-| `vitest:test_bug` | **PASS** | Native fix prevents vitest path escape |
-| `vitest:test_fix` | **PASS** | Native fix prevents vitest path escape |
+Legend: **PASS** = test passes, **FAIL** = path escapes the sandbox, N/A = not applicable
 
-### Without fix (upstream rules_js)
+### ESM Scenarios (per Node version)
 
-| Test | Result | Why |
-|------|--------|-----|
-| Node 18 ESM tests (x3) | **FAIL** | JS patches can't fix ESM on Node 18 |
-| Node 20/22 ESM tests (x6) | PASS | JS patches work on these versions |
-| esbuild | **FAIL** | No native interception without the fix |
-| Vite (x2) | **FAIL** | `__dirname` escapes via `import.meta.url` |
-| Vitest (x2) | **FAIL** | Config resolution escapes the sandbox |
+| Scenario | Issue | Node | Linux no fix | Linux + fix | macOS no fix | macOS + fix |
+|----------|-------|------|:------------:|:-----------:|:------------:|:-----------:|
+| ESM static import | [#362](https://github.com/aspect-build/rules_js/issues/362) | 18.18.2 | **FAIL** | PASS | **FAIL** | PASS |
+| | | 20.17.0 | PASS | PASS | PASS | PASS |
+| | | 22.12.0 | PASS | PASS | PASS | PASS |
+| Dynamic `import()` | [#353](https://github.com/aspect-build/rules_js/issues/353) | 18.18.2 | **FAIL** | PASS | **FAIL** | PASS |
+| | | 20.17.0 | PASS | PASS | PASS | PASS |
+| | | 22.12.0 | PASS | PASS | PASS | PASS |
+| `__dirname` escape | [#1669](https://github.com/aspect-build/rules_js/issues/1669) | 18.18.2 | **FAIL** | PASS | **FAIL** | PASS |
+| | | 20.17.0 | PASS | PASS | PASS | PASS |
+| | | 22.12.0 | PASS | PASS | PASS | PASS |
+
+**Why Node 18 fails without the fix**: On Node <= 18.18.2, the ESM resolver captures `realpathSync` via destructuring *before* `--require` patches run. The JS monkey-patches cannot intercept the already-captured function. The native fix operates at the C library level, intercepting `realpath()` and `lstat()` before Node even sees them.
+
+**Why Node 20/22 pass without the fix**: Node >= 18.19.0 changed the ESM resolver to call `realpathSync` late enough that `--require` patches can intercept it. The JS patches in `register.cjs` are sufficient.
+
+### Tool Scenarios (version-independent)
+
+| Scenario | Issue | Linux no fix | Linux + fix | macOS no fix | macOS + fix | Notes |
+|----------|-------|:------------:|:-----------:|:------------:|:-----------:|-------|
+| esbuild resolve | — | **FAIL** | **FAIL**\* | **FAIL** | PASS | \*Linux: esbuild is statically-linked Go, bypasses `LD_PRELOAD` |
+| Vite dev root | [#1669](https://github.com/aspect-build/rules_js/issues/1669) | **FAIL** | PASS | **FAIL** | PASS | `realpathSync(cwd)` + `__dirname` escape |
+| Vitest config | [#979](https://github.com/aspect-build/rules_js/issues/979) | **FAIL** | PASS | **FAIL** | PASS | Test file discovery via escaped paths |
+
+\*esbuild on **Linux** is a statically-linked Go binary that makes direct syscalls — `LD_PRELOAD` cannot intercept it. Use esbuild's `preserveSymlinks` option or the `ESBUILD_PRESERVE_SYMLINKS=1` env var as a workaround. On **macOS**, esbuild is dynamically linked, so `DYLD_INSERT_LIBRARIES` intercepts it directly.
+
+### Summary
+
+|  | Linux no fix | Linux + fix | macOS no fix | macOS + fix |
+|--|:------------:|:-----------:|:------------:|:-----------:|
+| Tests passing | 6 / 14 | 13 / 14 | 6 / 14 | **14 / 14** |
+| ESM on Node 18 | FAIL | PASS | FAIL | PASS |
+| ESM on Node 20+ | PASS | PASS | PASS | PASS |
+| esbuild | FAIL | FAIL\* | FAIL | PASS |
+| Vite / Vitest | FAIL | PASS | FAIL | PASS |
+
+\*Requires `preserveSymlinks` workaround on Linux (statically-linked binary).
 
 ## How the Native FS Sandbox Fix Works
 
